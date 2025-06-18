@@ -8,7 +8,7 @@ from PIL import ImageGrab, Image
 import tkinter as tk
 from datetime import datetime
 import pyautogui
-
+import keyboard
 # Import only the gui module - we'll implement player_view functionality inline
 import gui
 
@@ -17,7 +17,16 @@ def run_minesweeper_bot():
     
     # Create debug directory if it doesn't exist
     debug_dir = "debug_screenshots"
-    if not os.path.exists(debug_dir):
+    # Clean the debug directory on init
+    if os.path.exists(debug_dir):
+        for f in os.listdir(debug_dir):
+            file_path = os.path.join(debug_dir, f)
+            try:
+                if os.path.isfile(file_path):
+                    os.remove(file_path)
+            except Exception as e:
+                print(f"Could not remove {file_path}: {e}")
+    else:
         os.makedirs(debug_dir)
     
     # Statistics tracking
@@ -41,7 +50,7 @@ def run_minesweeper_bot():
         root.lift()
         
         # Small delay to ensure window is rendered
-        time.sleep(0.5)
+        time.sleep(0.1)
         
         # Get window position and dimensions
         x, y = root.winfo_rootx(), root.winfo_rooty() 
@@ -92,7 +101,7 @@ def run_minesweeper_bot():
             x, y, w, h = cv2.boundingRect(cnt)
             # Filter by aspect ratio (cells should be roughly square)
             aspect_ratio = float(w) / h
-            if 0.7 <= aspect_ratio <= 1.3:
+            if 0.5 <= aspect_ratio <= 1.2:
                 # Filter by size (cells should be reasonably sized)
                 if 20 <= w <= 100 and 20 <= h <= 100:
                     cell_contours.append((x, y, w, h))
@@ -207,7 +216,7 @@ def run_minesweeper_bot():
         root.lift()
         
         # Add significant delay to ensure UI is fully rendered
-        time.sleep(2.0)
+        time.sleep(0.5)
         
         # Initialize board analysis
         try:
@@ -242,23 +251,26 @@ def run_minesweeper_bot():
                         print(f"Error organizing cells into grid: {e}")
             
             # Schedule the bot to start playing after a delay
-            after_id = root.after(2000, start_playing)
+            after_id = root.after(100, start_playing)
             scheduled_afters.append(after_id)
                 
         except Exception as e:
             print(f"Error initializing board analysis: {e}")
             # Try again after a delay if initialization fails
-            after_id = root.after(2000, start_playing)
+            after_id = root.after(100, start_playing)
             scheduled_afters.append(after_id)
         
         return root
     
     def start_playing():
-        """Start playing the game with random moves"""
         make_random_moves(20, 0.2)
+        # Listen for 's' key to end the script
+        if keyboard.is_pressed('s'):
+            print("Detected 's' key press. Exiting script.")
+            root.destroy()
+            sys.exit()
     
     def click_cell_with_pyautogui(row, col):
-        """Click a cell using PyAutoGUI instead of Tkinter's invoke method"""
         try:
             # Get button's position
             button = buttons[row][col]
@@ -279,20 +291,10 @@ def run_minesweeper_bot():
             return False
     
     def make_random_moves(num_moves=20, delay=0.2):
-        """Make random moves on the board using PyAutoGUI for clicking"""
         rows = len(buttons)
         cols = len(buttons[0])
         
         for move_num in range(num_moves):
-            # Take a screenshot every 5 moves to track progress
-            if move_num % 5 == 0:
-                try:
-                    progress_screenshot = capture_screenshot()
-                    if progress_screenshot is not None:
-                        save_debug_screenshot(progress_screenshot, f"game_progress_move{move_num}")
-                except Exception as e:
-                    print(f"Error capturing progress: {e}")
-            
             # Pick a random cell
             r = random.randint(0, rows-1)
             c = random.randint(0, cols-1)
@@ -331,7 +333,7 @@ def run_minesweeper_bot():
                 print(f"Stats: Games={stats['games']}, Wins={stats['wins']}, Losses={stats['losses']}")
                 
                 # Schedule a new game to start after a short delay
-                after_id = root.after(2000, start_new_game)
+                after_id = root.after(100, start_new_game)
                 scheduled_afters.append(after_id)
                 return
                 
