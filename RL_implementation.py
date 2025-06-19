@@ -32,7 +32,10 @@ def run_minesweeper_bot():
     # Statistics tracking
     stats = {"games": 0, "wins": 0, "losses": 0}
     scheduled_afters = []  # Track scheduled callbacks
-    
+    board_state = None  # Store the current board state
+    cell_contours = None
+    organized_cells = None
+
     def save_debug_screenshot(img, name_prefix):
         """Save a screenshot with timestamp for debugging"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -188,8 +191,8 @@ def run_minesweeper_bot():
     
     def start_new_game():
         """Start or restart a game"""
-        nonlocal root, buttons
-        
+        nonlocal root, buttons, cell_contours, organized_cells
+
         # Cancel any pending callbacks
         for after_id in scheduled_afters:
             try:
@@ -290,30 +293,79 @@ def run_minesweeper_bot():
             print(f"Error clicking with PyAutoGUI: {e}")
             return False
     
+    def analyze_cell_numbers(image, organized_cells):
+        """Extract the number from each cell using color analysis (like player_view)"""
+        board = []
+        # Color ranges for different numbers (BGR format)
+        color_ranges = {
+            '1': {'lower': (220, 0, 0), 'upper': (255, 100, 100)},     # Blue
+            '2': {'lower': (50, 100, 0), 'upper': (150, 255, 200)},     # Green
+            '3': {'lower': (50, 100, 100), 'upper': (100, 150, 255)},   # Red
+            '4': {'lower': (128, 0, 128), 'upper': (255, 100, 255)},    # Purple
+            '5': {'lower': (0, 0, 128), 'upper': (100, 100, 180)},      # Dark Red
+            '6': {'lower': (128, 128, 0), 'upper': (255, 255, 100)},    # Turquoise
+            '7': {'lower': (0, 0, 0), 'upper': (50, 50, 50)},           # Black
+            '8': {'lower': (100, 100, 100), 'upper': (150, 150, 150)}   # Gray
+        }
+        for row in organized_cells:
+            board_row = []
+            for x, y, w, h in row:
+                center_x, center_y = x + w//2, y + h//2
+                cell_region = image[center_y-5:center_y+5, center_x-5:center_x+5]
+                if cell_region.size == 0:
+                    board_row.append("?")
+                    continue
+                avg_color = np.mean(cell_region, axis=(0, 1))
+                if np.mean(avg_color) > 200:  # Light background = unrevealed
+                    board_row.append(" ")
+                    continue
+                number = " "
+                for digit, range_data in color_ranges.items():
+                    lower = np.array(range_data['lower'])
+                    upper = np.array(range_data['upper'])
+                    # Check if any pixel in the region matches the color range
+                    mask = cv2.inRange(cell_region, lower, upper)
+                    if np.any(mask):
+                        number = digit
+                        break
+                board_row.append(number)
+            board.append(board_row)
+        return board
+
+    def print_board(board):
+        """Print the board state in a readable format"""
+        for row in board:
+            print(" ".join(row))
+
     def make_random_moves(num_moves=20, delay=0.2):
         rows = len(buttons)
         cols = len(buttons[0])
-        
+        nonlocal board_state
+
         for move_num in range(num_moves):
             # Pick a random cell
             r = random.randint(0, rows-1)
             c = random.randint(0, cols-1)
-            
             # Skip cells that are already revealed
             if buttons[r][c]['relief'] == 'sunken':
                 continue
 
             print(f"Left clicking cell at ({r}, {c})")
-            
-            # Try PyAutoGUI click first
             click_success = click_cell_with_pyautogui(r, c)
-            
-            # Fall back to Tkinter invoke if PyAutoGUI fails
             if not click_success:
                 print("Falling back to Tkinter invoke method")
                 buttons[r][c].invoke()
-           
-            # Check if game is over
+
+            # After each move, capture and analyze the board state
+            try:
+                screenshot = capture_screenshot()
+                if screenshot is not None and organized_cells is not None:
+                    board_state = analyze_cell_numbers(screenshot, organized_cells)
+                    print("Current board state:")
+                    print_board(board_state)
+            except Exception as e:
+                print(f"Error analyzing board state: {e}")
+
             root.update()
             if "Win" in gui.label['text'] or "Over" in gui.label['text']:
                 if "Win" in gui.label['text']:
@@ -337,7 +389,6 @@ def run_minesweeper_bot():
                 scheduled_afters.append(after_id)
                 return
                 
-            # Process UI updates and add delay
             root.update()
             time.sleep(delay)
         

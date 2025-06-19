@@ -1,0 +1,20 @@
+# .gitignore
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
+
+# Ignore virtual environments
+venv/
+
+
+# Ignore log files
+*.log
+
+# Ignore images and videos (optional)
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.avi
